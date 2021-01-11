@@ -5,14 +5,11 @@
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 
-#define NONE "\e[0m"
-#define RED "\e[43;31;1m"//鲜红
-#define BLACK "\e[43;30;1m"
-#define RIVER "\e[46m"
-#define LAND "\e[47m"
-
-//图形输出函数
-void rander_board(int board[10][11]);
+struct bak {
+  int board_bak[10][11];
+  int turn_bak;
+  struct bak* next;
+};
 
 int main(int argc, char** arcv)
 {
@@ -27,6 +24,10 @@ int main(int argc, char** arcv)
     [1][4]=7, [3][4]=7, [5][4]=7, [7][4]=7, [9][4]=7,
     [1][7]=-7, [3][7]=-7, [5][7]=-7, [7][7]=-7, [9][7]=-7,
   };
+
+  struct bak* latest_bak = NULL;
+  struct bak* new_bak = NULL;
+
   //初始化
   SDL_Init( SDL_INIT_EVERYTHING );
   TTF_Init();
@@ -41,6 +42,7 @@ int main(int argc, char** arcv)
   SDL_Rect offset_chess;
   SDL_Rect offset_msg;
   SDL_Rect offset_highlight;
+  SDL_Rect offset_load_back;
   SDL_Event event;
   //定义基本图片
   SDL_Surface* chessboard = IMG_Load( "chessboard.jpg" );
@@ -67,9 +69,12 @@ int main(int argc, char** arcv)
   SDL_Surface* black_turn  = TTF_RenderUTF8_Solid( font, "黑方走子", black);
   SDL_Surface* red_win     = TTF_RenderUTF8_Solid( font, "红方胜利！", red);
   SDL_Surface* black_win   = TTF_RenderUTF8_Solid( font, "黑方胜利！", black);
+  SDL_Surface* load_back   = TTF_RenderUTF8_Solid( font, "悔棋", black);
 
-  offset_msg.x = 180;
+  offset_msg.x = 90;
   offset_msg.y = 530;
+  offset_load_back.x = 350;
+  offset_load_back.y = 530;
   
   int turn = 1;//记录是红方回合还是黑方回合
   
@@ -178,10 +183,12 @@ int main(int argc, char** arcv)
       int j_to = 0;
       int i_to = 0;
       int input_get = 0;
+      int distance = 0;
       if(turn > 0)
         SDL_BlitSurface( red_turn, NULL, screen, &offset_msg);
       else
         SDL_BlitSurface( black_turn, NULL, screen, &offset_msg);
+      SDL_BlitSurface( load_back, NULL, screen, &offset_load_back );
       SDL_UpdateWindowSurface( screen_window );
       
     In_put_from:
@@ -205,7 +212,18 @@ int main(int argc, char** arcv)
                 }
             }
         }
-      
+      //启用悔棋
+      if( j_from >= 7 && i_from < 1 )
+        {
+          new_bak = latest_bak;
+          latest_bak = (*latest_bak).next;
+          memcpy( board, (*new_bak).board_bak, sizeof( board ));
+          turn = (*new_bak).turn_bak;
+          free(new_bak);
+          new_bak = NULL;
+          goto Turn_start;
+        }
+         
       //判断输入是否合法
       if(j_from < 1 || i_from < 1 || j_from > 9 || i_from > 10)
         goto In_put_from;
@@ -239,6 +257,17 @@ int main(int argc, char** arcv)
                 }
             }
         }
+      //启用悔棋
+      if( j_to >= 7 && i_to < 1 )
+        {
+          new_bak = latest_bak;
+          latest_bak = (*latest_bak).next;
+          memcpy( board, (*new_bak).board_bak, sizeof( board ));
+          turn = (*new_bak).turn_bak;
+          free(new_bak);
+          new_bak = NULL;
+          goto Turn_start;
+        }
       
       //取消选中
       if(j_to == j_from && i_to == i_from)
@@ -252,11 +281,30 @@ int main(int argc, char** arcv)
         {
         case  1://帅的走棋------------------------------------------------------
           {
-            if( j_to < 4 || j_to > 6 || turn*i_to > turn*(int)(5.5-turn*2.5) )
-              goto In_put_to;
-            if( (i_to != i_from && j_to != j_from) || abs(j_to-j_from) > 1 || abs(i_to-i_from) > 1 )
-              goto In_put_to;
-            break;
+            if( j_to == j_from && board[j_to][i_to] == -1*turn )
+              {
+                //printf("\nkiller 1\n");
+
+                for(int flag = i_from + turn ; turn*flag < turn*(i_to - turn) ; flag = flag + turn)
+                  {
+                    //printf("\n%d\n%d\n", j_from, flag);
+                    if(board[j_from][flag] != 0 )
+                      {
+                        //printf("\nYou Dead!!!!!!!!!!!!\n");
+                        goto In_put_to;
+                      }
+                  }
+                break;
+              }
+            else
+              {
+                //printf("\nkiller 2\n");
+                if( (i_to != i_from && j_to != j_from) || abs(j_to-j_from) > 1 || abs(i_to-i_from) > 1 )
+                  goto In_put_to;
+                if( j_to < 4 || j_to > 6 || turn*i_to > turn*(int)(5.5-turn*2.5) )
+                  goto In_put_to;
+                break;
+              }
           }
         case  2://仕的走棋------------------------------------------------------
           {
@@ -294,7 +342,7 @@ int main(int argc, char** arcv)
           {
             if( j_to != j_from && i_to != i_from )
               goto In_put_to;
-            int distance = 0;
+            distance = 0;
             if( j_to == j_from )
               {
                 distance = (i_to-i_from)/abs(i_to-i_from);
@@ -354,16 +402,26 @@ int main(int argc, char** arcv)
               {
                 if( i_to - i_from != turn || j_to != j_from )
                   goto In_put_to;
-              }else
-              if( turn*i_from > turn*(int)(5.5+0.5*turn))
-                {
-                  if( (i_to != i_from && j_to != j_from) || abs(j_to-j_from) > 1 || abs(i_to-i_from) > 1 || turn*(j_to-j_from) < 0)
+              }
+            if( turn*i_from >= turn*(int)(5.5+0.5*turn))
+              {
+                if( (i_to != i_from && j_to != j_from) || abs(j_to-j_from) > 1 || abs(i_to-i_from) > 1 || turn*(i_to-i_from) < 0 )
+                  {
+                    //printf("\n%d\n%d\n%d\n%d\n", j_to, i_to, j_from, i_from);
                     goto In_put_to;
-                }
+                  }
+              }
             break;
           }
         }
       
+      //备份现状以供悔棋
+      new_bak = malloc( sizeof( struct bak ) );
+      (*new_bak).next = latest_bak;
+      memcpy( (*new_bak).board_bak, board, sizeof(board) );
+      (*new_bak).turn_bak = turn;
+      latest_bak = new_bak;
+      new_bak = NULL;
 
       //移动棋子
       board[j_to][i_to] = board[j_from][i_from];
@@ -375,4 +433,12 @@ int main(int argc, char** arcv)
     }
 
 }
+
+
+
+
+
+
+
+
 
