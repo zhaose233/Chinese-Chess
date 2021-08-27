@@ -11,7 +11,7 @@
 
 1.  git clone https://github.com/weiliang1503/chinese-chess.git
 2.  cd chinese-chess
-3.  gcc chess_sdl2.c `sdl2-config --cflags --libs` -lSDL2_ttf -lSDL2_image -o chess_sdl2
+3.  gcc chess_sdl2.c \`sdl2-config --cflags --libs\` -lSDL2_ttf -lSDL2_image -o chess_sdl2
 4.  ./chess_sdl2
 
 #### 使用说明
